@@ -1,2 +1,2 @@
-# total-cli
+# Total CLI
 The official Total CLI repository.
