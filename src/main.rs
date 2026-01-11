@@ -4,15 +4,12 @@ use args::TotalArgs;
 use clap::Parser;
 use std::process::Command;
 
-use std::env;
 mod scaffolding;
-use winreg::enums::*;
-use winreg::RegKey;
 use std::io;
 
 use scaffolding::create_vue_scaffold;
 use scaffolding::create_rust_scaffold;
-use dialoguer::{theme::ColorfulTheme, Select};
+use dialoguer::theme::ColorfulTheme;
 
 fn check_dlltool() {
     if which::which("dlltool.exe").is_err() {
@@ -43,26 +40,76 @@ fn main() {
                 _ => println!("Invalid"),
             }
         }
-        args::EntityType::Delete(project ) => {
-            println!("Listing all installed programs:");
-            let programs_lm = list_installed_programs(HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall");
-            let programs_cu = list_installed_programs(HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall");
+        args::EntityType::Delete(project) => {
+            use std::path::PathBuf;
+            use dialoguer::Confirm;
 
-            let mut all_programs = Vec::new();
+            let path_str = &project.path;
+            let mut path = PathBuf::from(path_str);
 
-            if let Ok(mut programs) = programs_lm {
-                all_programs.append(&mut programs);
+            // On Windows, convert to UNC path to handle reserved device names and long paths
+            #[cfg(windows)]
+            {
+                if !path_str.starts_with(r"\\?\") {
+                    // Make path absolute if it isn't already
+                    let absolute_path = if path.is_absolute() {
+                        path
+                    } else {
+                        std::env::current_dir()
+                            .unwrap_or_default()
+                            .join(&path)
+                    };
+
+                    // Convert to string and add UNC prefix
+                    let path_string = absolute_path.to_string_lossy().replace("/", "\\");
+                    path = PathBuf::from(format!(r"\\?\{}", path_string));
+                }
             }
-            if let Ok(mut programs) = programs_cu {
-                all_programs.append(&mut programs);
-            }
 
-            if all_programs.is_empty() {
-                println!("No installed programs found.");
+            // Try to get metadata to check if path exists and determine type
+            let metadata = match std::fs::metadata(&path) {
+                Ok(m) => m,
+                Err(e) => {
+                    eprintln!("Error: Cannot access path '{}': {}", path_str, e);
+                    return;
+                }
+            };
+
+            let path_type = if metadata.is_file() {
+                "file"
+            } else if metadata.is_dir() {
+                "directory"
             } else {
-                match select_program(&all_programs) {
-                    Ok(selected_program) => println!("You selected: {}", selected_program),
-                    Err(e) => eprintln!("Failed to select a program: {}", e),
+                "path"
+            };
+
+            println!("Found {} at: {}", path_type, path_str);
+
+            let confirmation = Confirm::with_theme(&ColorfulTheme::default())
+                .with_prompt(format!("Are you sure you want to delete this {}?", path_type))
+                .default(false)
+                .interact();
+
+            match confirmation {
+                Ok(true) => {
+                    let result = if metadata.is_file() {
+                        std::fs::remove_file(&path)
+                    } else if metadata.is_dir() {
+                        std::fs::remove_dir_all(&path)
+                    } else {
+                        Err(io::Error::new(io::ErrorKind::Other, "Unsupported path type"))
+                    };
+
+                    match result {
+                        Ok(_) => println!("Successfully deleted: {}", path_str),
+                        Err(e) => eprintln!("Failed to delete {}: {}", path_str, e),
+                    }
+                }
+                Ok(false) => {
+                    println!("Deletion cancelled.");
+                }
+                Err(e) => {
+                    eprintln!("Error during confirmation: {}", e);
                 }
             }
         }
@@ -151,7 +198,6 @@ fn main() {
                     }
                 }
                 "python" => {
-                    use clap::Parser;
                     println!("Running Python project...");
                     let script = if std::path::Path::new("main.py").exists() {
                         "main.py".to_string()
@@ -204,44 +250,4 @@ fn install_vue() {
     // Add code here to install Vue using npm
     // For example, you might use a command like `npm install -g @vue/cli`
     // Customize this function based on the specific installation command for Vue.
-}
-
-fn list_installed_programs(hkey: winreg::HKEY, path: &str) -> io::Result<Vec<Program>> {
-    let reg_key = RegKey::predef(hkey);
-    let uninstall_key = reg_key.open_subkey_with_flags(path, KEY_READ)?;
-    let mut programs = Vec::new();
-
-    for subkey_name in uninstall_key.enum_keys().flatten() {
-        let subkey = uninstall_key.open_subkey_with_flags(&subkey_name, KEY_READ)?;
-
-        // Try to get the DisplayName value
-        if let Ok(display_name) = subkey.get_value::<String, _>("DisplayName") {
-            // Try to get the InstallLocation value
-            if let Ok(install_location) = subkey.get_value::<String, _>("InstallLocation") {
-                programs.push(Program {
-                    name: display_name,
-                    path: install_location,
-                });
-            }
-        }
-    }
-
-    Ok(programs)
-}
-#[derive(Debug)]
-struct Program {
-    name: String,
-    path: String,
-}
-
-
-fn select_program(programs: &[Program]) -> io::Result<String> {
-    let selections: Vec<String> = programs.iter().map(|p| p.name.clone()).collect();
-    let selection = Select::with_theme(&ColorfulTheme::default())
-        .with_prompt("Select a program to uninstall")
-        .items(&selections)
-        .default(0)
-        .interact()?;
-
-    Ok(programs[selection].path.clone())
 }

@@ -10,3 +10,4 @@ clap = { version = "4.2.5", features = ["derive"] }
 which = "4.0.2"
 winreg = "0.7"
 dialoguer = "0.9"
+home = "=0.5.11"
