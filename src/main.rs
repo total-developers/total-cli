@@ -168,15 +168,3 @@ fn main() {
     }
 }
 
-fn install_npm() {
-    // Add code here to install npm using the appropriate package manager for your OS
-    // For example, you might use a command like `sudo apt-get install npm` on Ubuntu
-    // or `brew install npm` on macOS.
-    // Customize this function based on your system's package manager.
-}
-
-fn install_vue() {
-    // Add code here to install Vue using npm
-    // For example, you might use a command like `npm install -g @vue/cli`
-    // Customize this function based on the specific installation command for Vue.
-}
