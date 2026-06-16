@@ -34,9 +34,11 @@ pub struct DeleteProgram {
 }
 
 #[derive(Debug, Args)]
+#[clap(trailing_var_arg = true)]
 pub struct RunProgram {
-    //The path or name of the project to run
     pub path: String,
+    #[clap(num_args = 0.., allow_hyphen_values = true)]
+    pub extra_args: Vec<String>,
 }
 
 
