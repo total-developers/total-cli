@@ -2,7 +2,9 @@ mod args;
 
 use args::TotalArgs;
 use clap::Parser;
-use std::process::Command;
+use std::io::Write;
+use std::process::{Command, Stdio};
+use std::thread;
 
 mod delete;
 mod scaffolding;
@@ -47,8 +49,12 @@ fn main() {
             match lang.as_str() {
                 "rust" => {
                     println!("Running Rust project with 'cargo run'...");
+                    let _ = std::io::stdout().flush();
                     let status = Command::new("cargo")
                         .arg("run")
+                        .stdin(Stdio::inherit())
+                        .stdout(Stdio::inherit())
+                        .stderr(Stdio::inherit())
                         .status()
                         .expect("Failed to run cargo");
                     if !status.success() {
@@ -56,10 +62,14 @@ fn main() {
                     }
                 }
                 "vue" => {
-                    println!("Running Vue project with 'npm run serve'...");
-                    let status = Command::new("npm")
+                    println!("Running Vue project with 'npm run dev'...");
+                    let _ = std::io::stdout().flush();
+                    let status = Command::new("npm.cmd")
                         .arg("run")
-                        .arg("serve")
+                        .arg("dev")
+                        .stdin(Stdio::inherit())
+                        .stdout(Stdio::inherit())
+                        .stderr(Stdio::inherit())
                         .status()
                         .expect("Failed to run npm");
                     if !status.success() {
@@ -68,7 +78,6 @@ fn main() {
                 }
                 "php" => {
                     use std::path::Path;
-                    // Laravel with Vue: check for both artisan and package.json
                     let is_laravel = Path::new("artisan").exists();
                     let is_vue = Path::new("package.json").exists()
                         && std::fs::read_to_string("package.json")
@@ -76,23 +85,35 @@ fn main() {
                             .unwrap_or(false);
 
                     if is_laravel && is_vue {
-                        println!("Detected Laravel project with Vue frontend.");
+                        println!("Detected Laravel + Vue project.");
                         println!("Starting backend: 'php artisan serve'...");
+                        println!("Starting frontend: 'npm run dev'...");
+                        let _ = std::io::stdout().flush();
+
                         let backend = Command::new("php")
                             .arg("artisan")
                             .arg("serve")
+                            .stdin(Stdio::inherit())
+                            .stdout(Stdio::inherit())
+                            .stderr(Stdio::inherit())
                             .spawn();
+
                         match backend {
                             Ok(mut child) => {
-                                println!("Starting frontend: 'npm run dev'...");
                                 let frontend = Command::new("npm.cmd")
                                     .arg("run")
                                     .arg("dev")
+                                    .stdin(Stdio::null())
+                                    .stdout(Stdio::inherit())
+                                    .stderr(Stdio::inherit())
                                     .spawn();
                                 match frontend {
                                     Ok(mut child2) => {
-                                        let _ = child.wait();
-                                        let _ = child2.wait();
+                                        // Wait on both concurrently so neither blocks the other's output
+                                        let t1 = thread::spawn(move || child.wait());
+                                        let t2 = thread::spawn(move || child2.wait());
+                                        let _ = t1.join();
+                                        let _ = t2.join();
                                     }
                                     Err(e) => {
                                         eprintln!("Failed to run Vue frontend: {}", e);
@@ -106,9 +127,13 @@ fn main() {
                         }
                     } else if is_laravel {
                         println!("Detected Laravel project. Running 'php artisan serve'...");
+                        let _ = std::io::stdout().flush();
                         let status = Command::new("php")
                             .arg("artisan")
                             .arg("serve")
+                            .stdin(Stdio::inherit())
+                            .stdout(Stdio::inherit())
+                            .stderr(Stdio::inherit())
                             .status()
                             .expect("Failed to run php artisan serve");
                         if !status.success() {
@@ -116,9 +141,13 @@ fn main() {
                         }
                     } else {
                         println!("Running PHP project with 'php -S localhost:8000'...");
+                        let _ = std::io::stdout().flush();
                         let status = Command::new("php")
                             .arg("-S")
                             .arg("localhost:8000")
+                            .stdin(Stdio::inherit())
+                            .stdout(Stdio::inherit())
+                            .stderr(Stdio::inherit())
                             .status()
                             .expect("Failed to run PHP built-in server");
                         if !status.success() {
@@ -133,7 +162,6 @@ fn main() {
                     } else if std::path::Path::new("app.py").exists() {
                         "app.py".to_string()
                     } else {
-                        // Try to parse --path/-p from std::env::args()
                         let mut script_path: Option<String> = None;
                         let mut args = std::env::args().peekable();
                         while let Some(arg) = args.next() {
@@ -152,8 +180,12 @@ fn main() {
                             }
                         }
                     };
+                    let _ = std::io::stdout().flush();
                     let status = Command::new("python")
                         .arg(&script)
+                        .stdin(Stdio::inherit())
+                        .stdout(Stdio::inherit())
+                        .stderr(Stdio::inherit())
                         .status()
                         .expect("Failed to run python script");
                     if !status.success() {
