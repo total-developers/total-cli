@@ -15,6 +15,7 @@ pub struct TotalArgs {
 pub enum EntityType {
     //Create Programs
     Create(CreateProgram),
+    #[clap(alias = "d", alias = "--d", alias = "--delete")]
     Delete(DeleteProgram),
     Run(RunProgram),
 }

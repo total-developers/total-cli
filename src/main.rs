@@ -44,25 +44,33 @@ fn main() {
             use std::path::PathBuf;
             use dialoguer::Confirm;
 
-            let path_str = &project.path;
+            // Strip trailing backslashes and stray quotes caused by Windows argv parsing
+            // (a trailing `\` in a quoted shell argument like `"foo\"` makes the Windows
+            // argument parser treat `\"` as an escaped quote, injecting a `"` into the value).
+            let path_str = project.path.trim_end_matches(|c: char| c == '\\' || c == '"');
             let mut path = PathBuf::from(path_str);
 
             // On Windows, convert to UNC path to handle reserved device names and long paths
             #[cfg(windows)]
             {
                 if !path_str.starts_with(r"\\?\") {
-                    // Make path absolute if it isn't already
-                    let absolute_path = if path.is_absolute() {
-                        path
-                    } else {
-                        std::env::current_dir()
-                            .unwrap_or_default()
-                            .join(&path)
-                    };
-
-                    // Convert to string and add UNC prefix
-                    let path_string = absolute_path.to_string_lossy().replace("/", "\\");
-                    path = PathBuf::from(format!(r"\\?\{}", path_string));
+                    // canonicalize resolves `.`/`..` and returns a \\?\ UNC path on Windows.
+                    // The \\?\ prefix bypasses normalization, so we must canonicalize first —
+                    // otherwise a path like `.\folder` becomes `\\?\C:\cwd\.\folder` which
+                    // Windows cannot find.
+                    match std::fs::canonicalize(&path) {
+                        Ok(canonical) => path = canonical,
+                        Err(_) => {
+                            // Path doesn't exist; make absolute so the metadata error is clear.
+                            if !path.is_absolute() {
+                                path = std::env::current_dir()
+                                    .unwrap_or_default()
+                                    .join(&path);
+                            }
+                            let path_string = path.to_string_lossy().replace("/", "\\");
+                            path = PathBuf::from(format!(r"\\?\{}", path_string));
+                        }
+                    }
                 }
             }
 
