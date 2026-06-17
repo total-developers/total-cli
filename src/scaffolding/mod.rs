@@ -1,5 +1,3 @@
-use std::env;
-use std::io::{self, Write};
 use std::path::Path;
 use std::process::{exit, Command};
 use which::which;
@@ -15,8 +13,18 @@ mod package_manager {
     }
 
     fn install_package(install_command: &str) {
-        println!("Installing package: {}", install_command);
-        let status = Command::new(install_command)
+        println!("Installing: {}", install_command);
+        let mut parts = install_command.split_whitespace();
+        let cmd = match parts.next() {
+            Some(c) => c,
+            None => {
+                eprintln!("Invalid install command.");
+                std::process::exit(1);
+            }
+        };
+        let args: Vec<&str> = parts.collect();
+        let status = Command::new(cmd)
+            .args(&args)
             .status()
             .expect("Failed to execute installation command");
 
@@ -26,90 +34,92 @@ mod package_manager {
         }
     }
 }
-pub fn create_rust_scaffold(project_name: &String) -> () {
-    // Check if Rust is installed
-    if let Err(_) = Command::new("rustc").arg("--version").status() {
-        println!("Rust is not installed. Installing Rust...");
-        
-        // Run Rustup installer
-        if let Err(err) = Command::new("curl").arg("--proto").arg(" '=https'").arg("--tlsv1.2").arg("-sSf").arg("https://sh.rustup.rs").status() {
-            eprintln!("Error: {}", err);
-            exit(1);
-        }
-        
-        // Check if installation was successful
-        if let Err(err) = Command::new("rustup-init").status() {
-            eprintln!("Error: {}", err);
-            exit(1);
-        }
 
-        println!("Rust installation completed successfully.");
-    } else {
-        if let Err(err) = Command::new("cargo").arg("new").arg(project_name).status() {
-            eprintln!("Error: {}", err);
-            exit(1);
+pub fn create_rust_scaffold(project_name: &str) {
+    if Command::new("rustc").arg("--version").output().is_err() {
+        println!("Rust is not installed. Installing Rust...");
+
+        #[cfg(target_os = "windows")]
+        let install_result = Command::new("winget")
+            .args(["install", "--id", "Rustlang.Rustup", "-e"])
+            .status();
+
+        #[cfg(not(target_os = "windows"))]
+        let install_result = Command::new("sh")
+            .arg("-c")
+            .arg("curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y")
+            .status();
+
+        match install_result {
+            Ok(s) if s.success() => println!("Rust installed successfully."),
+            Ok(_) => {
+                eprintln!("Rust installation failed. Install manually from https://rustup.rs");
+                exit(1);
+            }
+            Err(e) => {
+                eprintln!("Failed to launch installer: {}", e);
+                exit(1);
+            }
         }
-        println!(
-            "Rust project '{}' successfully scaffolded with cargo.",
-            project_name
-        );
-        
     }
-}
-pub fn create_vue_scaffold(project_name: &String) -> () {
-    println!("Staring a prelimanary scan to your enviornment...");
-    if Path::new(&project_name).exists() {
-        println!("Directory '{}' already exists", project_name);
+
+    if let Err(err) = Command::new("cargo").arg("new").arg(project_name).status() {
+        eprintln!("Error: {}", err);
         exit(1);
     }
-    //TODO CHECK IF THIS WORKS
+    println!("Rust project '{}' successfully scaffolded with cargo.", project_name);
+}
 
-    // Check and install npm
-    package_manager::install_if_not_found("npm", "your_npm_install_command_here");
+pub fn create_vue_scaffold(project_name: &str) {
+    println!("Starting a preliminary scan of your environment...");
 
-    // Check and install Vue
+    if Path::new(project_name).exists() {
+        eprintln!("Directory '{}' already exists.", project_name);
+        exit(1);
+    }
+
+    // npm comes with Node.js; on Windows use winget, elsewhere use the system package manager
+    #[cfg(target_os = "windows")]
+    package_manager::install_if_not_found("npm", "winget install OpenJS.NodeJS.LTS");
+    #[cfg(not(target_os = "windows"))]
+    package_manager::install_if_not_found("npm", "brew install node");
+
+    // Install Vue CLI if missing
+    #[cfg(target_os = "windows")]
+    package_manager::install_if_not_found("vue", "npm.cmd install -g @vue/cli");
+    #[cfg(not(target_os = "windows"))]
     package_manager::install_if_not_found("vue", "npm install -g @vue/cli");
-    // Find the path to vue
+
     let vue_path = match which("vue") {
         Ok(path) => path,
         Err(e) => {
             eprintln!("Error finding vue: {}", e);
-            std::process::exit(1);
+            exit(1);
         }
     };
+
     println!("[1/3] Starting the Vue scaffolding process...");
-    // Create a new Vue project using Vue
+
     let vue_create_command = Command::new(&vue_path)
         .arg("create")
         .arg("-d")
         .arg(project_name)
-        .output();
-    println!("[2/3] Building fresh packages...");
-    // Check for vue create errors
+        .status();
+
     match vue_create_command {
-        Ok(output) => {
-            if output.status.success() {
-                // Print standard output
-                if !output.stdout.is_empty() {
-                    println!("[3/3] Done.");
-                }
-            } else {
-                // Print standard error in case of failure
-                eprintln!(
-                    "Error initializing Vue project: {}",
-                    String::from_utf8_lossy(&output.stderr)
-                );
-                std::process::exit(1);
-            }
+        Ok(status) if status.success() => {
+            println!("[2/3] Building fresh packages...");
+            println!("[3/3] Done.");
+        }
+        Ok(_) => {
+            eprintln!("Error: vue create exited with a non-zero status.");
+            exit(1);
         }
         Err(e) => {
             eprintln!("Failed to execute Vue create: {}", e);
-            std::process::exit(1);
+            exit(1);
         }
     }
-    println!(
-        "Vue project '{}' successfully scaffolded with npm.",
-        project_name
-    );
-}
 
+    println!("Vue project '{}' successfully scaffolded.", project_name);
+}
