@@ -87,6 +87,7 @@ Any arguments after the language are forwarded directly to the underlying tool. 
 |----------|----------|
 | rust     | Runs `cargo run` in the current directory |
 | vue      | Runs `npm run dev` in the current directory |
+| next     | Runs `npm run dev` in the current directory (also accepts `nextjs` or `next.js`) |
 | php      | Detects plain PHP or Laravel. Plain PHP runs `php -S localhost:8000`. Laravel alone runs `php artisan serve`. Laravel with a Vue frontend starts both `php artisan serve` and `npm run dev` concurrently |
 | python   | Runs `main.py` or `app.py` if present, otherwise accepts `--path <file.py>` or `-p <file.py>` |
 
@@ -96,6 +97,7 @@ Any arguments after the language are forwarded directly to the underlying tool. 
 total run rust
 total run rust --release
 total run vue
+total run next
 total run php
 total run python
 total run python --path src/server.py

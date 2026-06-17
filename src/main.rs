@@ -161,6 +161,22 @@ fn main() {
                         }
                     }
                 }
+                "next" | "nextjs" | "next.js" => {
+                    println!("Running Next.js project with 'npm run dev'...");
+                    let _ = std::io::stdout().flush();
+                    let status = Command::new("npm.cmd")
+                        .arg("run")
+                        .arg("dev")
+                        .args(&run.extra_args)
+                        .stdin(Stdio::inherit())
+                        .stdout(Stdio::inherit())
+                        .stderr(Stdio::inherit())
+                        .status()
+                        .expect("Failed to run Next.js dev server");
+                    if !status.success() {
+                        eprintln!("Failed to run Next.js project.");
+                    }
+                }
                 "python" => {
                     println!("Running Python project...");
                     let script = if std::path::Path::new("main.py").exists() {
