@@ -76,27 +76,35 @@ total delete my-file.txt
 Run an existing project in the current directory.
 
 ```
-total run <language>
+total run <language> [extra args...]
 ```
+
+Any arguments after the language are forwarded directly to the underlying tool. For example, `total run rust --release` passes `--release` to `cargo run`.
 
 **Supported languages:**
 
 | Language | Behavior |
 |----------|----------|
 | rust     | Runs `cargo run` in the current directory |
-| vue      | Runs `npm run serve` in the current directory |
-| php      | Detects plain PHP or Laravel. If Laravel with a Vue frontend is detected, starts both `php artisan serve` and `npm run dev` concurrently |
+| vue      | Runs `npm run dev` in the current directory |
+| php      | Detects plain PHP or Laravel. Plain PHP runs `php -S localhost:8000`. Laravel alone runs `php artisan serve`. Laravel with a Vue frontend starts both `php artisan serve` and `npm run dev` concurrently |
 | python   | Runs `main.py` or `app.py` if present, otherwise accepts `--path <file.py>` or `-p <file.py>` |
 
 **Examples:**
 
 ```
 total run rust
+total run rust --release
 total run vue
 total run php
 total run python
 total run python --path src/server.py
 ```
+
+**Notes:**
+
+- All run commands stream output in real time (stdin, stdout, and stderr are inherited from the terminal).
+- When running a Laravel + Vue project, both the backend and frontend are waited on concurrently so neither blocks the other's output.
 
 ---
 
