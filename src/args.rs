@@ -1,8 +1,4 @@
-use clap:: {
-    Args,
-    Parser,
-    Subcommand
-};
+use clap::{Args, Parser, Subcommand};
 
 #[derive(Debug, Parser)]
 #[clap(author, version, about)]
@@ -40,5 +36,3 @@ pub struct RunProgram {
     #[clap(num_args = 0.., allow_hyphen_values = true)]
     pub extra_args: Vec<String>,
 }
-
-

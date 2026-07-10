@@ -67,7 +67,10 @@ pub fn create_rust_scaffold(project_name: &str) {
         eprintln!("Error: {}", err);
         exit(1);
     }
-    println!("Rust project '{}' successfully scaffolded with cargo.", project_name);
+    println!(
+        "Rust project '{}' successfully scaffolded with cargo.",
+        project_name
+    );
 }
 
 pub fn create_vue_scaffold(project_name: &str) {

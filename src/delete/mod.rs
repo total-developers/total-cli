@@ -1,7 +1,7 @@
+use dialoguer::theme::ColorfulTheme;
+use dialoguer::Confirm;
 use std::io;
 use std::path::PathBuf;
-use dialoguer::Confirm;
-use dialoguer::theme::ColorfulTheme;
 
 pub fn run(path_input: &str) {
     // Strip trailing backslashes and stray quotes caused by Windows argv parsing
@@ -23,9 +23,7 @@ pub fn run(path_input: &str) {
                 Err(_) => {
                     // Path doesn't exist; make absolute so the metadata error is clear.
                     if !path.is_absolute() {
-                        path = std::env::current_dir()
-                            .unwrap_or_default()
-                            .join(&path);
+                        path = std::env::current_dir().unwrap_or_default().join(&path);
                     }
                     let path_string = path.to_string_lossy().replace("/", "\\");
                     path = PathBuf::from(format!(r"\\?\{}", path_string));
@@ -53,7 +51,10 @@ pub fn run(path_input: &str) {
     println!("Found {} at: {}", path_type, path_str);
 
     let confirmation = Confirm::with_theme(&ColorfulTheme::default())
-        .with_prompt(format!("Are you sure you want to delete this {}?", path_type))
+        .with_prompt(format!(
+            "Are you sure you want to delete this {}?",
+            path_type
+        ))
         .default(false)
         .interact();
 
@@ -64,7 +65,10 @@ pub fn run(path_input: &str) {
             } else if metadata.is_dir() {
                 std::fs::remove_dir_all(&path)
             } else {
-                Err(io::Error::new(io::ErrorKind::Other, "Unsupported path type"))
+                Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "Unsupported path type",
+                ))
             };
 
             match result {

@@ -89,7 +89,7 @@ Any arguments after the language are forwarded directly to the underlying tool. 
 | vue      | Runs `npm run dev` in the current directory |
 | next     | Runs `npm run dev` in the current directory (also accepts `nextjs` or `next.js`) |
 | php      | Detects plain PHP or Laravel. Plain PHP runs `php -S localhost:8000`. Laravel alone runs `php artisan serve`. Laravel with a Vue frontend starts both `php artisan serve` and `npm run dev` concurrently |
-| python   | Runs `main.py` or `app.py` if present, otherwise accepts `--path <file.py>` or `-p <file.py>` |
+| python   | Runs Python with `uv run python`, prompting to install uv first if it is missing. Uses `--path <file.py>` or `-p <file.py>` if provided, otherwise `main.py` or `app.py` if present |
 
 **Examples:**
 
@@ -134,4 +134,4 @@ Each command is isolated in its own module so new commands can be added without 
 - Rust / Cargo
 - For `create vue` and `run vue`: Node.js, npm, and the Vue CLI (`npm install -g @vue/cli`)
 - For `run php`: PHP installed and available in PATH
-- For `run python`: Python installed and available in PATH
+- For `run python`: uv installed and available in PATH, or network access to install it when prompted

@@ -2,6 +2,8 @@ mod args;
 
 use args::TotalArgs;
 use clap::Parser;
+use dialoguer::Confirm;
+use std::env;
 use std::io::Write;
 use std::process::{Command, Stdio};
 use std::thread;
@@ -11,6 +13,115 @@ mod scaffolding;
 
 use scaffolding::create_vue_scaffold;
 use scaffolding::create_rust_scaffold;
+
+fn python_script_and_args(extra_args: &[String]) -> Option<(String, Vec<String>)> {
+    let mut forwarded_args = Vec::new();
+    let mut script_path: Option<String> = None;
+    let mut args = extra_args.iter();
+
+    while let Some(arg) = args.next() {
+        if arg == "--path" || arg == "-p" {
+            script_path = args.next().cloned();
+        } else {
+            forwarded_args.push(arg.clone());
+        }
+    }
+
+    let script = if let Some(path) = script_path {
+        path
+    } else if std::path::Path::new("main.py").exists() {
+        "main.py".to_string()
+    } else if std::path::Path::new("app.py").exists() {
+        "app.py".to_string()
+    } else {
+        return None;
+    };
+
+    Some((script, forwarded_args))
+}
+
+fn add_uv_install_dirs_to_path() {
+    let Some(home_dir) = home::home_dir() else {
+        return;
+    };
+    let candidates = [
+        home_dir.join(".local").join("bin"),
+        home_dir.join(".cargo").join("bin"),
+    ];
+    let current_path = env::var_os("PATH").unwrap_or_default();
+    let mut paths: Vec<_> = env::split_paths(&current_path).collect();
+
+    for candidate in candidates {
+        if candidate.exists() && !paths.iter().any(|path| path == &candidate) {
+            paths.push(candidate);
+        }
+    }
+
+    if let Ok(new_path) = env::join_paths(paths) {
+        env::set_var("PATH", new_path);
+    }
+}
+
+fn install_uv() -> bool {
+    let confirmed = Confirm::new()
+        .with_prompt("uv is not installed. Download and install it now?")
+        .default(true)
+        .interact()
+        .unwrap_or(false);
+
+    if !confirmed {
+        return false;
+    }
+
+    println!("Installing uv...");
+    let status = if cfg!(windows) {
+        Command::new("powershell")
+            .arg("-ExecutionPolicy")
+            .arg("ByPass")
+            .arg("-c")
+            .arg("irm https://astral.sh/uv/install.ps1 | iex")
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .status()
+    } else {
+        Command::new("sh")
+            .arg("-c")
+            .arg("if command -v curl >/dev/null 2>&1; then curl -LsSf https://astral.sh/uv/install.sh | sh; else wget -qO- https://astral.sh/uv/install.sh | sh; fi")
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .status()
+    };
+
+    match status {
+        Ok(status) if status.success() => {
+            add_uv_install_dirs_to_path();
+            if which::which("uv").is_ok() {
+                true
+            } else {
+                eprintln!("uv was installed, but it is not available in PATH for this session. Restart your terminal and try again.");
+                false
+            }
+        }
+        Ok(_) => {
+            eprintln!("uv installation failed.");
+            false
+        }
+        Err(err) => {
+            eprintln!("Failed to start uv installer: {}", err);
+            false
+        }
+    }
+}
+
+fn ensure_uv_available() -> bool {
+    if which::which("uv").is_ok() {
+        true
+    } else {
+        install_uv()
+    }
+}
 
 fn check_dlltool() {
     if which::which("dlltool.exe").is_err() {
@@ -178,39 +289,28 @@ fn main() {
                     }
                 }
                 "python" => {
-                    println!("Running Python project...");
-                    let script = if std::path::Path::new("main.py").exists() {
-                        "main.py".to_string()
-                    } else if std::path::Path::new("app.py").exists() {
-                        "app.py".to_string()
-                    } else {
-                        let mut script_path: Option<String> = None;
-                        let mut args = std::env::args().peekable();
-                        while let Some(arg) = args.next() {
-                            if arg == "--path" || arg == "-p" {
-                                if let Some(val) = args.next() {
-                                    script_path = Some(val);
-                                    break;
-                                }
-                            }
-                        }
-                        match script_path {
-                            Some(path) => path,
-                            None => {
-                                eprintln!("No 'main.py' or 'app.py' found in the current directory.\nPlease specify a script with --path <file.py> or -p <file.py>.");
-                                return;
-                            }
+                    println!("Running Python project with 'uv run python'...");
+                    let (script, forwarded_args) = match python_script_and_args(&run.extra_args) {
+                        Some(result) => result,
+                        None => {
+                            eprintln!("No 'main.py' or 'app.py' found in the current directory.\nPlease specify a script with --path <file.py> or -p <file.py>.");
+                            return;
                         }
                     };
+                    if !ensure_uv_available() {
+                        return;
+                    }
                     let _ = std::io::stdout().flush();
-                    let status = Command::new("python")
+                    let status = Command::new("uv")
+                        .arg("run")
+                        .arg("python")
                         .arg(&script)
-                        .args(&run.extra_args)
+                        .args(&forwarded_args)
                         .stdin(Stdio::inherit())
                         .stdout(Stdio::inherit())
                         .stderr(Stdio::inherit())
                         .status()
-                        .expect("Failed to run python script");
+                        .expect("Failed to run python script with uv");
                     if !status.success() {
                         eprintln!("Failed to run Python project.");
                     }
@@ -222,4 +322,3 @@ fn main() {
         }
     }
 }
-
