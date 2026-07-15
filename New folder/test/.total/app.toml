@@ -1,0 +1,56 @@
+[project]
+name = "test"
+description = ""
+version = "0.1.0"
+framework = "python"
+language = "python"
+environment = "development"
+
+[run]
+command = "python"
+args = ["main.py"]
+working_directory = "."
+entrypoint = "main.py"
+
+[build]
+command = "python"
+args = ["-m", "pip", "install", "-r", "requirements.txt"]
+
+[dev]
+command = "python"
+args = ["main.py"]
+
+[test]
+command = "python"
+args = ["-m", "unittest", "discover"]
+
+[logs]
+directory = "logs"
+patterns = ["*.log"]
+main = ""
+
+[cleanup]
+enabled = true
+analyze_logs = true
+generate_report = true
+delete_logs = false
+truncate_logs = true
+retention_days = 7
+
+[ai]
+directory = ".total/ai"
+
+[deploy]
+type = ""
+root = ""
+
+[health]
+endpoint = "/health"
+
+[environment]
+env_file = ".env"
+
+[metadata]
+owner = ""
+created_with = "total-cli"
+template = "python"

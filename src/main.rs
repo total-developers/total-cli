@@ -14,21 +14,28 @@ use scaffolding::create_python_scaffold;
 use scaffolding::create_rust_scaffold;
 use scaffolding::create_vue_scaffold;
 
-fn manifest_language() -> Result<Option<String>, String> {
+fn manifest_language() -> Result<String, String> {
     let path = std::path::Path::new(".total/app.toml");
     if !path.exists() {
-        return Ok(None);
+        return Err(format!(
+            "No {} found. Run this command from a project created by Total CLI.",
+            path.display()
+        ));
     }
 
     let contents = std::fs::read_to_string(path)
         .map_err(|err| format!("Failed to read {}: {}", path.display(), err))?;
+    manifest_language_from(&contents).map_err(|err| format!("{} in {}", err, path.display()))
+}
+
+fn manifest_language_from(contents: &str) -> Result<String, String> {
     let manifest: toml::Value = contents
         .parse()
-        .map_err(|err| format!("Failed to parse {}: {}", path.display(), err))?;
+        .map_err(|err| format!("Failed to parse manifest: {}", err))?;
     let project = manifest
         .get("project")
         .and_then(toml::Value::as_table)
-        .ok_or_else(|| format!("{} is missing a [project] section", path.display()))?;
+        .ok_or_else(|| "Manifest is missing a [project] section".to_string())?;
 
     let framework = project.get("framework").and_then(toml::Value::as_str);
     let language = project.get("language").and_then(toml::Value::as_str);
@@ -49,21 +56,30 @@ fn manifest_language() -> Result<Option<String>, String> {
     };
 
     runnable
-        .map(|value| Some(value.to_string()))
-        .ok_or_else(|| {
-            format!(
-                "Could not determine a supported project type from {}",
-                path.display()
-            )
-        })
+        .map(str::to_string)
+        .ok_or_else(|| "Could not determine a supported project type from manifest".to_string())
 }
 
-fn run_language(explicit: Option<&String>) -> Result<String, String> {
-    match manifest_language()? {
-        Some(language) => Ok(language),
-        None => explicit.map(|value| value.to_lowercase()).ok_or_else(|| {
-            "No .total/app.toml found. Specify a language, for example: total run rust".to_string()
-        }),
+fn run_language(explicit: Option<&str>) -> Result<String, String> {
+    match explicit {
+        Some(language) => Ok(language.to_lowercase()),
+        None => manifest_language(),
+    }
+}
+
+fn run_inputs<'a>(
+    language: Option<&'a String>,
+    extra_args: &[String],
+) -> (Option<&'a str>, Vec<String>) {
+    match language {
+        Some(value) if value.starts_with('-') => {
+            let mut forwarded = Vec::with_capacity(extra_args.len() + 1);
+            forwarded.push(value.clone());
+            forwarded.extend_from_slice(extra_args);
+            (None, forwarded)
+        }
+        Some(value) => (Some(value.as_str()), extra_args.to_vec()),
+        None => (None, extra_args.to_vec()),
     }
 }
 
@@ -140,7 +156,9 @@ fn main() {
             delete::run(&project.path);
         }
         args::EntityType::Run(run) => {
-            let lang = match run_language(run.language.as_ref()) {
+            let (explicit_language, extra_args) =
+                run_inputs(run.language.as_ref(), &run.extra_args);
+            let lang = match run_language(explicit_language) {
                 Ok(language) => language,
                 Err(err) => {
                     eprintln!("{}", err);
@@ -156,7 +174,7 @@ fn main() {
                     let _ = std::io::stdout().flush();
                     let status = Command::new("cargo")
                         .arg("run")
-                        .args(&run.extra_args)
+                        .args(&extra_args)
                         .stdin(Stdio::inherit())
                         .stdout(Stdio::inherit())
                         .stderr(Stdio::inherit())
@@ -175,7 +193,7 @@ fn main() {
                     let status = Command::new(installer::npm_command())
                         .arg("run")
                         .arg("dev")
-                        .args(&run.extra_args)
+                        .args(&extra_args)
                         .stdin(Stdio::inherit())
                         .stdout(Stdio::inherit())
                         .stderr(Stdio::inherit())
@@ -209,7 +227,7 @@ fn main() {
                         let backend = Command::new("php")
                             .arg("artisan")
                             .arg("serve")
-                            .args(&run.extra_args)
+                            .args(&extra_args)
                             .stdin(Stdio::inherit())
                             .stdout(Stdio::inherit())
                             .stderr(Stdio::inherit())
@@ -220,7 +238,7 @@ fn main() {
                                 let frontend = Command::new(installer::npm_command())
                                     .arg("run")
                                     .arg("dev")
-                                    .args(&run.extra_args)
+                                    .args(&extra_args)
                                     .stdin(Stdio::null())
                                     .stdout(Stdio::inherit())
                                     .stderr(Stdio::inherit())
@@ -249,7 +267,7 @@ fn main() {
                         let status = Command::new("php")
                             .arg("artisan")
                             .arg("serve")
-                            .args(&run.extra_args)
+                            .args(&extra_args)
                             .stdin(Stdio::inherit())
                             .stdout(Stdio::inherit())
                             .stderr(Stdio::inherit())
@@ -264,7 +282,7 @@ fn main() {
                         let status = Command::new("php")
                             .arg("-S")
                             .arg("localhost:8000")
-                            .args(&run.extra_args)
+                            .args(&extra_args)
                             .stdin(Stdio::inherit())
                             .stdout(Stdio::inherit())
                             .stderr(Stdio::inherit())
@@ -284,7 +302,7 @@ fn main() {
                     let status = Command::new(installer::npm_command())
                         .arg("run")
                         .arg("dev")
-                        .args(&run.extra_args)
+                        .args(&extra_args)
                         .stdin(Stdio::inherit())
                         .stdout(Stdio::inherit())
                         .stderr(Stdio::inherit())
@@ -296,7 +314,7 @@ fn main() {
                 }
                 "python" => {
                     println!("Running Python project with 'uv run python'...");
-                    let (script, forwarded_args) = match python_script_and_args(&run.extra_args) {
+                    let (script, forwarded_args) = match python_script_and_args(&extra_args) {
                         Some(result) => result,
                         None => {
                             eprintln!("No 'main.py' or 'app.py' found in the current directory.\nPlease specify a script with --path <file.py> or -p <file.py>.");
@@ -331,10 +349,58 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::run_language;
+    use crate::args::{EntityType, TotalArgs};
+    use clap::Parser;
+    use super::{manifest_language, manifest_language_from, run_inputs, run_language};
 
     #[test]
-    fn explicit_language_is_used_without_a_manifest() {
-        assert_eq!(run_language(Some(&"RUST".to_string())).unwrap(), "rust");
+    fn explicit_language_preserves_the_original_run_behavior() {
+        assert_eq!(run_language(Some("RUST")).unwrap(), "rust");
+    }
+
+    #[test]
+    fn run_accepts_both_original_and_automatic_forms() {
+        let original = TotalArgs::try_parse_from(["total", "run", "rust", "--release"]).unwrap();
+        let automatic = TotalArgs::try_parse_from(["total", "run", "--release"]).unwrap();
+
+        match original.entity_type {
+            EntityType::Run(run) => {
+                assert_eq!(run.language.as_deref(), Some("rust"));
+                assert_eq!(run.extra_args, ["--release"]);
+            }
+            _ => panic!("expected run command"),
+        }
+        match automatic.entity_type {
+            EntityType::Run(run) => {
+                let (language, args) = run_inputs(run.language.as_ref(), &run.extra_args);
+                assert_eq!(language, None);
+                assert_eq!(args, ["--release"]);
+            }
+            _ => panic!("expected run command"),
+        }
+    }
+
+    #[test]
+    fn language_is_detected_from_the_generated_manifest_fields() {
+        assert_eq!(
+            manifest_language_from("[project]\nframework = \"cargo\"\nlanguage = \"rust\"")
+                .unwrap(),
+            "rust"
+        );
+        assert_eq!(
+            manifest_language_from("[project]\nframework = \"vue\"\nlanguage = \"javascript\"")
+                .unwrap(),
+            "vue"
+        );
+        assert_eq!(
+            manifest_language_from("[project]\nframework = \"python\"\nlanguage = \"python\"")
+                .unwrap(),
+            "python"
+        );
+    }
+
+    #[test]
+    fn running_without_a_manifest_has_a_clear_error() {
+        assert!(manifest_language().unwrap_err().contains(".total/app.toml"));
     }
 }

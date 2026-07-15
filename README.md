@@ -85,7 +85,7 @@ Run an existing project in the current directory.
 total run [language] [extra args...]
 ```
 
-When `.total/app.toml` exists, `total run` reads the project type from the manifest, so the language does not need to be entered. The optional language argument remains available for older projects. Remaining arguments are forwarded directly to the underlying tool. For example, `total run rust --release` passes `--release` to `cargo run`.
+The original `total run <language>` form remains supported. As a convenience, the language can be omitted when `.total/app.toml` exists, and Total will detect the project type automatically. Arguments after the language are forwarded directly to the underlying tool. For example, `total run rust --release` passes `--release` to `cargo run`.
 
 **Supported languages:**
 
@@ -100,8 +100,8 @@ When `.total/app.toml` exists, `total run` reads the project type from the manif
 **Examples:**
 
 ```
-total run rust
 total run
+total run rust
 total run rust --release
 total run vue
 total run next
