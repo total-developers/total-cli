@@ -32,7 +32,8 @@ pub struct DeleteProgram {
 #[derive(Debug, Args)]
 #[clap(trailing_var_arg = true)]
 pub struct RunProgram {
-    pub path: String,
+    // Optional for projects containing .total/app.toml
+    pub language: Option<String>,
     #[clap(num_args = 0.., allow_hyphen_values = true)]
     pub extra_args: Vec<String>,
 }

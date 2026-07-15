@@ -10,8 +10,61 @@ mod delete;
 mod installer;
 mod scaffolding;
 
-use scaffolding::create_vue_scaffold;
 use scaffolding::create_rust_scaffold;
+use scaffolding::create_vue_scaffold;
+
+fn manifest_language() -> Result<Option<String>, String> {
+    let path = std::path::Path::new(".total/app.toml");
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    let contents = std::fs::read_to_string(path)
+        .map_err(|err| format!("Failed to read {}: {}", path.display(), err))?;
+    let manifest: toml::Value = contents
+        .parse()
+        .map_err(|err| format!("Failed to parse {}: {}", path.display(), err))?;
+    let project = manifest
+        .get("project")
+        .and_then(toml::Value::as_table)
+        .ok_or_else(|| format!("{} is missing a [project] section", path.display()))?;
+
+    let framework = project.get("framework").and_then(toml::Value::as_str);
+    let language = project.get("language").and_then(toml::Value::as_str);
+    let runnable = match framework.map(str::to_lowercase).as_deref() {
+        Some("cargo") | Some("rust") => Some("rust"),
+        Some("vue") => Some("vue"),
+        Some("next") | Some("nextjs") | Some("next.js") => Some("next"),
+        Some("laravel") | Some("php") => Some("php"),
+        Some("python") => Some("python"),
+        _ => match language.map(str::to_lowercase).as_deref() {
+            Some("rust") => Some("rust"),
+            Some("python") | Some("py") => Some("python"),
+            Some("php") => Some("php"),
+            Some("vue") => Some("vue"),
+            Some("next") | Some("nextjs") | Some("next.js") => Some("next"),
+            _ => None,
+        },
+    };
+
+    runnable
+        .map(|value| Some(value.to_string()))
+        .ok_or_else(|| {
+            format!(
+                "Could not determine a supported project type from {}",
+                path.display()
+            )
+        })
+}
+
+fn run_language(explicit: Option<&String>) -> Result<String, String> {
+    match manifest_language()? {
+        Some(language) => Ok(language),
+        None => explicit.map(|value| value.to_lowercase()).ok_or_else(|| {
+            "No .total/app.toml found. Specify a language, for example: total run rust".to_string()
+        }),
+    }
+}
 
 fn python_script_and_args(extra_args: &[String]) -> Option<(String, Vec<String>)> {
     let mut forwarded_args = Vec::new();
@@ -53,17 +106,22 @@ fn main() {
         args::EntityType::Create(project) => {
             let PROJECT_LANGUAGE: String = project.language.to_lowercase();
             let PROJECT_TITLE: String = project.title.to_lowercase();
-            
 
-            match PROJECT_LANGUAGE.as_str(){
+            match PROJECT_LANGUAGE.as_str() {
                 "rust" => {
-                    println!("Creating a program named: {:?}, in {:?}", PROJECT_TITLE, PROJECT_LANGUAGE);
+                    println!(
+                        "Creating a program named: {:?}, in {:?}",
+                        PROJECT_TITLE, PROJECT_LANGUAGE
+                    );
                     create_rust_scaffold(&PROJECT_TITLE)
-                },
+                }
                 "vue" => {
-                    println!("Creating a program named: {:?}, in {:?}", PROJECT_TITLE, PROJECT_LANGUAGE);
+                    println!(
+                        "Creating a program named: {:?}, in {:?}",
+                        PROJECT_TITLE, PROJECT_LANGUAGE
+                    );
                     create_vue_scaffold(&PROJECT_TITLE);
-                },
+                }
 
                 _ => println!("Invalid"),
             }
@@ -72,7 +130,13 @@ fn main() {
             delete::run(&project.path);
         }
         args::EntityType::Run(run) => {
-            let lang = run.path.to_lowercase();
+            let lang = match run_language(run.language.as_ref()) {
+                Ok(language) => language,
+                Err(err) => {
+                    eprintln!("{}", err);
+                    return;
+                }
+            };
             match lang.as_str() {
                 "rust" => {
                     println!("Running Rust project with 'cargo run'...");
@@ -252,5 +316,15 @@ fn main() {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::run_language;
+
+    #[test]
+    fn explicit_language_is_used_without_a_manifest() {
+        assert_eq!(run_language(Some(&"RUST".to_string())).unwrap(), "rust");
     }
 }

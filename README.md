@@ -76,10 +76,10 @@ total delete my-file.txt
 Run an existing project in the current directory.
 
 ```
-total run <language> [extra args...]
+total run [language] [extra args...]
 ```
 
-Any arguments after the language are forwarded directly to the underlying tool. For example, `total run rust --release` passes `--release` to `cargo run`.
+When `.total/app.toml` exists, `total run` reads the project type from the manifest, so the language does not need to be entered. The optional language argument remains available for older projects. Remaining arguments are forwarded directly to the underlying tool. For example, `total run rust --release` passes `--release` to `cargo run`.
 
 **Supported languages:**
 
@@ -95,6 +95,7 @@ Any arguments after the language are forwarded directly to the underlying tool. 
 
 ```
 total run rust
+total run
 total run rust --release
 total run vue
 total run next
