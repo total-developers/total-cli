@@ -32,6 +32,7 @@ total create <language> <title>
 
 | Language | Description                          |
 |----------|--------------------------------------|
+| python   | Creates a Python project with an entrypoint, dependency file, tests directory, and `.gitignore` |
 | rust     | Scaffolds a new project with `cargo new` |
 | vue      | Scaffolds a new Vue project via the Vue CLI |
 
@@ -40,7 +41,12 @@ total create <language> <title>
 ```
 total create rust my-app
 total create vue my-app
+total create python my-app
 ```
+
+Every successful scaffold includes `.total/app.toml`, the project manifest used by
+Total CLI. It records project metadata plus the framework-specific run, build,
+development, test, log, cleanup, AI, deployment, health, and environment settings.
 
 ---
 
