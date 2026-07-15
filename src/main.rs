@@ -10,6 +10,7 @@ mod delete;
 mod installer;
 mod scaffolding;
 
+use scaffolding::create_python_scaffold;
 use scaffolding::create_rust_scaffold;
 use scaffolding::create_vue_scaffold;
 
@@ -91,7 +92,6 @@ fn python_script_and_args(extra_args: &[String]) -> Option<(String, Vec<String>)
 
     Some((script, forwarded_args))
 }
-
 fn check_dlltool() {
     if which::which("dlltool.exe").is_err() {
         eprintln!("Warning: 'dlltool.exe' not found in PATH. Some build steps (especially for Windows targets) may fail. \
@@ -108,6 +108,13 @@ fn main() {
             let PROJECT_TITLE: String = project.title.to_lowercase();
 
             match PROJECT_LANGUAGE.as_str() {
+                "python" | "py" => {
+                    println!(
+                        "Creating a program named: {:?}, in {:?}",
+                        PROJECT_TITLE, PROJECT_LANGUAGE
+                    );
+                    create_python_scaffold(&PROJECT_TITLE)
+                }
                 "rust" => {
                     println!(
                         "Creating a program named: {:?}, in {:?}",
@@ -123,7 +130,10 @@ fn main() {
                     create_vue_scaffold(&PROJECT_TITLE);
                 }
 
-                _ => println!("Invalid"),
+                _ => eprintln!(
+                    "Unsupported language '{}'. Supported project types: python, rust, vue.",
+                    PROJECT_LANGUAGE
+                ),
             }
         }
         args::EntityType::Delete(project) => {
