@@ -20,6 +20,29 @@ Add the resulting binary to your PATH to use `total` from anywhere.
 
 ## Commands
 
+### init and detach
+
+Initialize Total CLI support in an existing application. Total automatically detects
+its language, framework, runtime, entry points, commands, environment, and logging:
+
+```
+total init
+```
+
+This creates `.total/app.toml` and the `.total/ai`, `.total/logs`, and
+`.total/reports` support directories. Existing manifests are never overwritten.
+
+Remove the files created by initialization with:
+
+```
+total detach
+```
+
+Detach preserves user-created files inside `.total/` and removes directories only
+when they are empty.
+
+---
+
 ### create
 
 Scaffold a new project in a supported language.

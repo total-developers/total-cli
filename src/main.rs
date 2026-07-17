@@ -7,6 +7,7 @@ use std::process::{Command, Stdio};
 use std::thread;
 
 mod delete;
+mod init;
 mod installer;
 mod scaffolding;
 
@@ -119,6 +120,18 @@ fn main() {
     check_dlltool();
     let args: TotalArgs = TotalArgs::parse();
     match &args.entity_type {
+        args::EntityType::Init => {
+            if let Err(err) = init::run() {
+                eprintln!("Initialization failed: {err}");
+                std::process::exit(1);
+            }
+        }
+        args::EntityType::Detach => {
+            if let Err(err) = init::detach() {
+                eprintln!("Detach failed: {err}");
+                std::process::exit(1);
+            }
+        }
         args::EntityType::Create(project) => {
             let PROJECT_LANGUAGE: String = project.language.to_lowercase();
             let PROJECT_TITLE: String = project.title.to_lowercase();
@@ -356,6 +369,18 @@ mod tests {
     #[test]
     fn explicit_language_preserves_the_original_run_behavior() {
         assert_eq!(run_language(Some("RUST")).unwrap(), "rust");
+    }
+
+    #[test]
+    fn init_and_detach_commands_parse() {
+        assert!(matches!(
+            TotalArgs::try_parse_from(["total", "init"]).unwrap().entity_type,
+            EntityType::Init
+        ));
+        assert!(matches!(
+            TotalArgs::try_parse_from(["total", "detach"]).unwrap().entity_type,
+            EntityType::Detach
+        ));
     }
 
     #[test]

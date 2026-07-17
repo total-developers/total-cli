@@ -9,6 +9,10 @@ pub struct TotalArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum EntityType {
+    /// Initialize Total support in the current application
+    Init,
+    /// Remove files created by Total initialization
+    Detach,
     //Create Programs
     Create(CreateProgram),
     #[clap(alias = "d", alias = "--d", alias = "--delete")]
