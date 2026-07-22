@@ -16,14 +16,14 @@ struct Detection {
     log_patterns: Vec<String>,
 }
 
-pub fn run(language_hint: &str) -> Result<(), String> {
+pub fn run() -> Result<(), String> {
     let root = std::env::current_dir().map_err(|e| e.to_string())?;
     let config = root.join(".total/app.toml");
     if config.exists() {
         return Err(".total/app.toml already exists; initialization did not overwrite it".into());
     }
 
-    let detection = detect(&root, language_hint)?;
+    let detection = detect(&root)?;
     let project_name = root
         .file_name()
         .and_then(|name| name.to_str())
@@ -45,28 +45,66 @@ pub fn run(language_hint: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn detect(root: &Path, hint: &str) -> Result<Detection, String> {
-    let hint = normalize_language(hint)?;
-    match hint.as_str() {
-        "rust" => detect_rust(root),
-        "python" => detect_python(root),
-        "javascript" | "typescript" => detect_javascript(root, &hint),
-        "php" => detect_php(root),
-        _ => unreachable!(),
+fn detect(root: &Path) -> Result<Detection, String> {
+    // Framework-specific backend markers take precedence over package.json.
+    // Laravel applications normally contain package.json for their Vite frontend,
+    // but that does not make the application itself a JavaScript project.
+    if root.join("artisan").is_file() {
+        detect_php(root)
+    } else if root.join("Cargo.toml").is_file() {
+        detect_rust(root)
+    } else if root.join("manage.py").is_file()
+        || root.join("pyproject.toml").is_file()
+        || root.join("requirements.txt").is_file()
+        || root.join("main.py").is_file()
+        || root.join("app.py").is_file()
+    {
+        detect_python(root)
+    } else if root.join("composer.json").is_file() || root.join("index.php").is_file() {
+        detect_php(root)
+    } else if root.join("package.json").is_file() {
+        let language = if root.join("tsconfig.json").is_file() {
+            "typescript"
+        } else {
+            "javascript"
+        };
+        detect_javascript(root, language)
+    } else {
+        Err("Could not detect a supported application. Expected artisan, Cargo.toml, Python application files, composer.json, index.php, or package.json".into())
     }
 }
 
-fn normalize_language(value: &str) -> Result<String, String> {
-    match value.trim().to_ascii_lowercase().as_str() {
-        "rust" | "rs" => Ok("rust".into()),
-        "python" | "py" => Ok("python".into()),
-        "javascript" | "js" | "node" | "nodejs" => Ok("javascript".into()),
-        "typescript" | "ts" => Ok("typescript".into()),
-        "php" => Ok("php".into()),
-        other => Err(format!(
-            "Unsupported --type '{other}'. Supported types: rust, python, javascript, typescript, php"
-        )),
+pub fn detach() -> Result<(), String> {
+    let root = std::env::current_dir().map_err(|e| e.to_string())?;
+    let total = root.join(".total");
+    if !total.exists() {
+        return Err("No .total directory found; nothing to detach".into());
     }
+
+    for file in [
+        "app.toml",
+        "ai/README.md",
+        "logs/.gitkeep",
+        "reports/.gitkeep",
+    ] {
+        let path = total.join(file);
+        if path.is_file() {
+            fs::remove_file(&path)
+                .map_err(|e| format!("Failed to remove {}: {e}", path.display()))?;
+        }
+    }
+    for directory in ["ai", "logs", "reports", ""] {
+        let path = total.join(directory);
+        if path.is_dir() {
+            match fs::remove_dir(&path) {
+                Ok(()) => {}
+                Err(error) if error.kind() == io::ErrorKind::DirectoryNotEmpty => {}
+                Err(error) => return Err(format!("Failed to remove {}: {error}", path.display())),
+            }
+        }
+    }
+    println!("Detached Total CLI support. User-created files in .total were preserved.");
+    Ok(())
 }
 
 fn detect_rust(root: &Path) -> Result<Detection, String> {
@@ -352,6 +390,17 @@ impl<T> Pipe for T {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn fixture(name: &str) -> std::path::PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("total-{name}-{unique}"));
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
     #[test]
     fn rendered_configuration_is_valid_toml() {
         let d = base(
@@ -367,7 +416,39 @@ mod tests {
         render("sample", &d).parse::<toml::Value>().unwrap();
     }
     #[test]
-    fn aliases_are_normalized() {
-        assert_eq!(normalize_language("TS").unwrap(), "typescript");
+    fn laravel_takes_precedence_over_its_javascript_frontend() {
+        let root = fixture("laravel-detection");
+        fs::write(root.join("artisan"), "").unwrap();
+        fs::write(
+            root.join("composer.json"),
+            r#"{"require":{"laravel/framework":"^12.0"}}"#,
+        )
+        .unwrap();
+        fs::write(
+            root.join("package.json"),
+            r#"{"devDependencies":{"vite":"latest","vue":"latest"}}"#,
+        )
+        .unwrap();
+
+        let detected = detect(&root).unwrap();
+        assert_eq!(detected.language, "php");
+        assert_eq!(detected.framework, "laravel");
+        assert_eq!(detected.entrypoint, "artisan");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn package_json_only_project_is_still_javascript() {
+        let root = fixture("javascript-detection");
+        fs::write(
+            root.join("package.json"),
+            r#"{"dependencies":{"vue":"latest"}}"#,
+        )
+        .unwrap();
+
+        let detected = detect(&root).unwrap();
+        assert_eq!(detected.language, "javascript");
+        assert_eq!(detected.framework, "vue");
+        fs::remove_dir_all(root).unwrap();
     }
 }
