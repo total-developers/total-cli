@@ -10,7 +10,7 @@ pub struct TotalArgs {
 #[derive(Debug, Subcommand)]
 pub enum EntityType {
     /// Initialize Total support in the current application
-    Init,
+    Init(InitProgram),
     /// Remove files created by Total initialization
     Detach,
     //Create Programs
@@ -18,6 +18,13 @@ pub enum EntityType {
     #[clap(alias = "d", alias = "--d", alias = "--delete")]
     Delete(DeleteProgram),
     Run(RunProgram),
+}
+
+#[derive(Debug, Args)]
+pub struct InitProgram {
+    /// Override automatic project detection
+    #[clap(long = "type", value_name = "TYPE")]
+    pub project_type: Option<String>,
 }
 
 #[derive(Debug, Args)]

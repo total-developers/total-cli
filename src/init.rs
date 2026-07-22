@@ -16,14 +16,17 @@ struct Detection {
     log_patterns: Vec<String>,
 }
 
-pub fn run() -> Result<(), String> {
+pub fn run(project_type: Option<&str>) -> Result<(), String> {
     let root = std::env::current_dir().map_err(|e| e.to_string())?;
     let config = root.join(".total/app.toml");
     if config.exists() {
         return Err(".total/app.toml already exists; initialization did not overwrite it".into());
     }
 
-    let detection = detect(&root)?;
+    let detection = match project_type {
+        Some(project_type) => detect_as(&root, project_type)?,
+        None => detect(&root)?,
+    };
     let project_name = root
         .file_name()
         .and_then(|name| name.to_str())
@@ -70,7 +73,22 @@ fn detect(root: &Path) -> Result<Detection, String> {
         };
         detect_javascript(root, language)
     } else {
-        Err("Could not detect a supported application. Expected artisan, Cargo.toml, Python application files, composer.json, index.php, or package.json".into())
+        Err("Could not detect a supported application. Expected artisan, Cargo.toml, Python application files, composer.json, index.php, or package.json. Use --type <TYPE> to select one explicitly".into())
+    }
+}
+
+fn detect_as(root: &Path, project_type: &str) -> Result<Detection, String> {
+    match project_type.trim().to_ascii_lowercase().as_str() {
+        "rust" | "rs" | "cargo" => detect_rust(root),
+        "python" | "py" | "django" | "flask" | "fastapi" => detect_python(root),
+        "javascript" | "js" | "node" | "nodejs" | "vue" | "react" | "next" => {
+            detect_javascript(root, "javascript")
+        }
+        "typescript" | "ts" => detect_javascript(root, "typescript"),
+        "php" | "laravel" => detect_php(root),
+        other => Err(format!(
+            "Unsupported --type '{other}'. Supported types: rust, python, javascript, typescript, php"
+        )),
     }
 }
 
@@ -449,6 +467,18 @@ mod tests {
         let detected = detect(&root).unwrap();
         assert_eq!(detected.language, "javascript");
         assert_eq!(detected.framework, "vue");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn type_override_is_used_when_automatic_detection_is_ambiguous() {
+        let root = fixture("type-override");
+        fs::write(root.join("composer.json"), r#"{"require":{}}"#).unwrap();
+        fs::write(root.join("package.json"), r#"{"dependencies":{}}"#).unwrap();
+
+        let detected = detect_as(&root, "javascript").unwrap();
+        assert_eq!(detected.language, "javascript");
+        assert_eq!(detected.framework, "node");
         fs::remove_dir_all(root).unwrap();
     }
 }

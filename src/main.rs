@@ -120,8 +120,8 @@ fn main() {
     check_dlltool();
     let args: TotalArgs = TotalArgs::parse();
     match &args.entity_type {
-        args::EntityType::Init => {
-            if let Err(err) = init::run() {
+        args::EntityType::Init(init) => {
+            if let Err(err) = init::run(init.project_type.as_deref()) {
                 eprintln!("Initialization failed: {err}");
                 std::process::exit(1);
             }
@@ -373,10 +373,16 @@ mod tests {
 
     #[test]
     fn init_and_detach_commands_parse() {
-        assert!(matches!(
-            TotalArgs::try_parse_from(["total", "init"]).unwrap().entity_type,
-            EntityType::Init
-        ));
+        let automatic = TotalArgs::try_parse_from(["total", "init"]).unwrap();
+        let fallback = TotalArgs::try_parse_from(["total", "init", "--type", "php"]).unwrap();
+        match automatic.entity_type {
+            EntityType::Init(init) => assert_eq!(init.project_type, None),
+            _ => panic!("expected init command"),
+        }
+        match fallback.entity_type {
+            EntityType::Init(init) => assert_eq!(init.project_type.as_deref(), Some("php")),
+            _ => panic!("expected init command"),
+        }
         assert!(matches!(
             TotalArgs::try_parse_from(["total", "detach"]).unwrap().entity_type,
             EntityType::Detach

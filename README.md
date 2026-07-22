@@ -29,6 +29,13 @@ its language, framework, runtime, entry points, commands, environment, and loggi
 total init
 ```
 
+If automatic detection cannot identify the project correctly, override it with a
+supported project type:
+
+```
+total init --type php
+```
+
 This creates `.total/app.toml` and the `.total/ai`, `.total/logs`, and
 `.total/reports` support directories. Existing manifests are never overwritten.
 
